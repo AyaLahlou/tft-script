@@ -303,7 +303,7 @@ class InputChannelEmbedding(nn.Module):
         if num_categorical == 0:
             self.categorical_transform = NullTransform()
 
-    def forward(self, x_numeric, x_categorical) -> torch.Tensor:
+    def forward(self, x_numeric: torch.Tensor, x_categorical: torch.Tensor) -> torch.Tensor:
         batch_shape = x_numeric.shape if x_numeric.numel() > 0 else x_categorical.shape
 
         processed_numeric = self.numeric_transform(x_numeric)
@@ -314,7 +314,7 @@ class InputChannelEmbedding(nn.Module):
         # [(num_samples * num_temporal_steps) x state_size]
         # (for the static input channel, num_temporal_steps is irrelevant and can be treated as 1
 
-        # the resulting embeddings for all the input varaibles are concatenated to a flattened representation
+        # the resulting embeddings for all the input variables are concatenated to a flattened representation
         merged_transformations = torch.cat(processed_numeric + processed_categorical, dim=1)
         # Dimensions:
         # merged_transformations: [(num_samples * num_temporal_steps) x (state_size * total_input_variables)]
