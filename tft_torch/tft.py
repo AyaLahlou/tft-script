@@ -304,7 +304,7 @@ class InputChannelEmbedding(nn.Module):
             self.categorical_transform = NullTransform()
 
     def forward(self, x_numeric, x_categorical) -> torch.Tensor:
-        batch_shape = x_numeric.shape if x_numeric.nelement() > 0 else x_categorical.shape
+        batch_shape = x_numeric.shape if x_numeric.numel() > 0 else x_categorical.shape
 
         processed_numeric = self.numeric_transform(x_numeric)
         processed_categorical = self.categorical_transform(x_categorical)
