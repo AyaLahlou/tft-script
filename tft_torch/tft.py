@@ -357,10 +357,11 @@ class NumericInputTransformation(nn.Module):
     def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
         # every input variable is projected using its dedicated linear layer,
         # the results are stored as a list
-        projections = []
-        for i in range(self.num_inputs):
-            projections.append(self.numeric_projection_layers[i](x[:, [i]]))
-
+        projections: List[torch.Tensor] = []
+        # TorchScript supports enumerating over ModuleList
+        for idx, layer in enumerate(self.numeric_projection_layers):
+            # idx is a literal integer in each iteration
+            projections.append(layer(x[:, [idx]]))
         return projections
 
 
