@@ -303,7 +303,7 @@ class InputChannelEmbedding(nn.Module):
         if num_categorical == 0:
             self.categorical_transform = NullTransform()
 
-    def forward(self, x_numeric, x_categorical) -> torch.tensor:
+    def forward(self, x_numeric, x_categorical) -> torch.Tensor:
         batch_shape = x_numeric.shape if x_numeric.nelement() > 0 else x_categorical.shape
 
         processed_numeric = self.numeric_transform(x_numeric)
@@ -354,7 +354,7 @@ class NumericInputTransformation(nn.Module):
         for _ in range(self.num_inputs):
             self.numeric_projection_layers.append(nn.Linear(1, self.state_size))
 
-    def forward(self, x: torch.tensor) -> List[torch.tensor]:
+    def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
         # every input variable is projected using its dedicated linear layer,
         # the results are stored as a list
         projections = []
@@ -392,7 +392,7 @@ class CategoricalInputTransformation(nn.Module):
         for idx, cardinality in enumerate(self.cardinalities):
             self.categorical_embedding_layers.append(nn.Embedding(cardinality, self.state_size))
 
-    def forward(self, x: torch.tensor) -> List[torch.tensor]:
+    def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
         # every input variable is projected using its dedicated embedding layer,
         # the results are stored as a list
         embeddings = []
@@ -698,10 +698,10 @@ class TemporalFusionTransformer(nn.Module):
         # ============================================================
         self.output_layer = nn.Linear(self.state_size, self.num_outputs)
 
-    def apply_temporal_selection(self, temporal_representation: torch.tensor,
-                                 static_selection_signal: torch.tensor,
+    def apply_temporal_selection(self, temporal_representation: torch.Tensor,
+                                 static_selection_signal: torch.Tensor,
                                  temporal_selection_module: VariableSelectionNetwork
-                                 ) -> Tuple[torch.tensor, torch.tensor]:
+                                 ) -> Tuple[torch.Tensor, torch.Tensor]:
         num_samples, num_temporal_steps, _ = temporal_representation.shape
 
         # replicate the selection signal along time
@@ -735,7 +735,7 @@ class TemporalFusionTransformer(nn.Module):
         return temporal_selection_output, temporal_selection_weights
 
     @staticmethod
-    def replicate_along_time(static_signal: torch.tensor, time_steps: int) -> torch.tensor:
+    def replicate_along_time(static_signal: torch.Tensor, time_steps: int) -> torch.Tensor:
         """
         This method gets as an input a static_signal (non-temporal tensor) [num_samples x num_features],
         and replicates it along time for 'time_steps' times,
@@ -752,7 +752,7 @@ class TemporalFusionTransformer(nn.Module):
         return time_distributed_signal
 
     @staticmethod
-    def stack_time_steps_along_batch(temporal_signal: torch.tensor) -> torch.tensor:
+    def stack_time_steps_along_batch(temporal_signal: torch.Tensor) -> torch.Tensor:
         """
         This method gets as an input a temporal signal [num_samples x time_steps x num_features]
         and stacks the batch dimension and the temporal dimension on the same axis (dim=0).
@@ -761,7 +761,7 @@ class TemporalFusionTransformer(nn.Module):
         """
         return temporal_signal.view(-1, temporal_signal.size(-1))
 
-    def transform_inputs(self, batch: Dict[str, torch.tensor]) -> Tuple[torch.tensor, ...]:
+    def transform_inputs(self, batch: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, ...]:
         """
         This method processes the batch and transform each input channel (historical_ts, future_ts, static)
         separately to eventually return the learned embedding for each of the input channels
@@ -785,7 +785,7 @@ class TemporalFusionTransformer(nn.Module):
                                                  x_categorical=batch.get('future_ts_categorical', empty_tensor))
         return future_ts_rep, historical_ts_rep, static_rep
 
-    def get_static_encoders(self, selected_static: torch.tensor) -> Tuple[torch.tensor, ...]:
+    def get_static_encoders(self, selected_static: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         """
         This method processes the variable selection results for the static data, yielding signals which are designed
         to allow better integration of the information from static metadata.
@@ -802,8 +802,8 @@ class TemporalFusionTransformer(nn.Module):
         c_seq_cell = self.static_encoder_sequential_cell_init(selected_static)
         return c_enrichment, c_selection, c_seq_cell, c_seq_hidden
 
-    def apply_sequential_processing(self, selected_historical: torch.tensor, selected_future: torch.tensor,
-                                    c_seq_hidden: torch.tensor, c_seq_cell: torch.tensor) -> torch.tensor:
+    def apply_sequential_processing(self, selected_historical: torch.Tensor, selected_future: torch.Tensor,
+                                    c_seq_hidden: torch.Tensor, c_seq_cell: torch.Tensor) -> torch.Tensor:
         """
         This part of the model is designated to mimic a sequence-to-sequence layer which will be used for local
         processing.
@@ -839,8 +839,8 @@ class TemporalFusionTransformer(nn.Module):
         gated_lstm_output = self.post_lstm_gating(lstm_output, residual=lstm_input)
         return gated_lstm_output
 
-    def apply_static_enrichment(self, gated_lstm_output: torch.tensor,
-                                static_enrichment_signal: torch.tensor) -> torch.tensor:
+    def apply_static_enrichment(self, gated_lstm_output: torch.Tensor,
+                                static_enrichment_signal: torch.Tensor) -> torch.Tensor:
         """
         This static enrichment stage enhances temporal features with static metadata using a GRN.
         The static enrichment signal is an output of a static covariate encoder, and the GRN is shared across time.
@@ -873,7 +873,7 @@ class TemporalFusionTransformer(nn.Module):
 
         return enriched_sequence
 
-    def apply_self_attention(self, enriched_sequence: torch.tensor,
+    def apply_self_attention(self, enriched_sequence: torch.Tensor,
                              num_historical_steps: int,
                              num_future_steps: int):
         # create a mask - so that future steps will be exposed (able to attend) only to preceding steps
