@@ -1,5 +1,7 @@
 import torch
 from torch import nn
+from typing import List
+
 
 
 class TimeDistributed(nn.Module):
@@ -52,5 +54,5 @@ class NullTransform(nn.Module):
         super(NullTransform, self).__init__()
 
     @staticmethod
-    def forward(empty_input: torch.tensor):
+    def forward(empty_input: torch.Tensor) -> List[torch.Tensor]:
         return []
