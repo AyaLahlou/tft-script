@@ -42,3 +42,7 @@ jobs:
         run: |
           cd tests
           pytest -vv
+      - name: TorchScript test
+        run: |
+          cd tests
+          pytest test_torchscript.py
