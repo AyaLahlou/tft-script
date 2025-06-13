@@ -315,7 +315,13 @@ class InputChannelEmbedding(nn.Module):
         # (for the static input channel, num_temporal_steps is irrelevant and can be treated as 1
 
         # the resulting embeddings for all the input variables are concatenated to a flattened representation
-        merged_transformations = torch.cat(processed_numeric + processed_categorical, dim=1)
+        # Manually merge the two lists so TorchScript sees a pure List[Tensor], not a Tensor add
+        merged_list: List[torch.Tensor] = []
+        for t in processed_numeric:
+            merged_list.append(t)
+        for t in processed_categorical:
+            merged_list.append(t)
+        merged_transformations = torch.cat(merged_list, dim=1)
         # Dimensions:
         # merged_transformations: [(num_samples * num_temporal_steps) x (state_size * total_input_variables)]
         # total_input_variables stands for the amount of all input variables in the specific input channel, i.e

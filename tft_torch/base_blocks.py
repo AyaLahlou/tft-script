@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from typing import List
+
 
 
 
@@ -27,26 +27,32 @@ class TimeDistributed(nn.Module):
         self.batch_first: bool = batch_first  # indicates the dimensions order of the sequential data.
         self.return_reshaped: bool = return_reshaped
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # If this is “static” (no time dim), treat it the same as a single time-step
+        if x.dim() <= 2:
+            # x: [batch, features]
+            y = self.module(x)  # should return a Tensor [batch, out_features]
+            return y
 
-        # in case the incoming tensor is a two-dimensional tensor - infer no temporal information is involved,
-        # and simply apply the module
-        if len(x.size()) <= 2:
-            return self.module(x)
+        # Now x is [batch, time, features]
+        B = x.size(0)
+        T = x.size(1)
+        F_in = x.size(2)
+        # flatten batch & time
+        x_flat = x.contiguous().view(B * T, F_in)     # [B*T, F_in]
+        y_flat = self.module(x_flat)                  # [B*T, F_out]
 
-        # Squash samples and time-steps into a single axis
-        x_reshape = x.contiguous().view(-1, x.size(-1))  # (samples * time-steps, input_size)
-        # apply the module on each time-step separately
-        y = self.module(x_reshape)
-
-        # reshaping the module output as sequential tensor (if required)
         if self.return_reshaped:
+            F_out = y_flat.size(1)
             if self.batch_first:
-                y = y.contiguous().view(x.size(0), -1, y.size(-1))  # (samples, time-steps, output_size)
+                # reshape to [batch, time, out_features]
+                return y_flat.contiguous().view(B, T, F_out)
             else:
-                y = y.view(-1, x.size(1), y.size(-1))  # (time-steps, samples, output_size)
+                # reshape to [time, batch, out_features]
+                return y_flat.contiguous().view(T, B, F_out)
 
-        return y
+        # otherwise, just return the flat output
+        return y_flat
 
 
 class NullTransform(nn.Module):
@@ -54,5 +60,9 @@ class NullTransform(nn.Module):
         super(NullTransform, self).__init__()
 
     @staticmethod
-    def forward(empty_input: torch.Tensor) -> List[torch.Tensor]:
-        return []
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # completely ignore x and return an “empty” embedding tensor
+        # shape: [batch*time_steps, 0] so concatenation still works
+        # if x is 2-D ([batch, features]) or 3-D ([batch, time, features]), flatten first
+        flat = x.view(-1, x.shape[-1]) if x.dim() > 1 else x.unsqueeze(1)
+        return flat.new_empty((flat.size(0), 0))
