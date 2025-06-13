@@ -2,7 +2,6 @@ import pytest
 import numpy as np
 import pandas as pd
 import torch
-from omegaconf import OmegaConf
 from tft_torch import tft
 
 
@@ -34,7 +33,7 @@ def test_tft():
         'data_props': data_props
     }
 
-    model = tft.TemporalFusionTransformer(OmegaConf.create(configuration))
+    model = tft.TemporalFusionTransformer(configuration)
 
     # create batch
     batch_size = 256
@@ -42,32 +41,37 @@ def test_tft():
     future_steps = 30
 
     batch = {
-        'static_feats_numeric': torch.rand(batch_size, data_props['num_static_numeric'],
-                                           dtype=torch.float32),
-        'static_feats_categorical': torch.stack([torch.randint(c, size=(batch_size,)) for c in
-                                                 data_props['static_categorical_cardinalities']],
-                                                dim=-1).type(torch.LongTensor),
-        'historical_ts_numeric': torch.rand(batch_size, historical_steps, data_props['num_historical_numeric'],
-                                            dtype=torch.float32),
-        'historical_ts_categorical': torch.stack([torch.randint(c, size=(batch_size, historical_steps)) for c in
-                                                  data_props['historical_categorical_cardinalities']],
-                                                 dim=-1).type(torch.LongTensor),
-        'future_ts_numeric': torch.rand(batch_size, future_steps, data_props['num_future_numeric'],
-                                        dtype=torch.float32),
-        'future_ts_categorical': torch.stack([torch.randint(c, size=(batch_size, future_steps)) for c in
-                                              data_props['future_categorical_cardinalities']],
-                                             dim=-1).type(torch.LongTensor),
-
+        'static_feats_numeric': torch.rand(batch_size, data_props['num_static_numeric'], dtype=torch.float32),
+        'static_feats_categorical': torch.stack([
+            torch.randint(c, size=(batch_size,)) for c in data_props['static_categorical_cardinalities']
+        ], dim=-1).long(),
+        'historical_ts_numeric': torch.rand(
+            batch_size, historical_steps, data_props['num_historical_numeric'], dtype=torch.float32
+        ),
+        'historical_ts_categorical': torch.stack([
+            torch.randint(c, size=(batch_size, historical_steps))
+            for c in data_props['historical_categorical_cardinalities']
+        ], dim=-1).long(),
+        'future_ts_numeric': torch.rand(
+            batch_size, future_steps, data_props['num_future_numeric'], dtype=torch.float32
+        ),
+        'future_ts_categorical': torch.stack([
+            torch.randint(c, size=(batch_size, future_steps))
+            for c in data_props['future_categorical_cardinalities']
+        ], dim=-1).long(),
     }
 
-    batch_outputs = model(batch)
+    batch_outputs = model(
+        batch['historical_ts_numeric'],
+        batch['historical_ts_categorical'],
+        batch['future_ts_numeric'],
+        batch['future_ts_categorical'],
+        batch['static_feats_numeric'],
+        batch['static_feats_categorical'],
+    )
 
-    assert isinstance(batch_outputs, dict)
-    assert all([k in batch_outputs for k in ['predicted_quantiles',
-                                             'static_weights',
-                                             'historical_selection_weights',
-                                             'future_selection_weights',
-                                             'attention_scores']])
+    assert isinstance(batch_outputs, tuple)
+    assert len(batch_outputs) == 5
 
     num_quantiles = len(configuration['model']['output_quantiles'])
     num_static = data_props['num_static_numeric'] + data_props['num_static_categorical']
@@ -119,14 +123,14 @@ def test_tft_invalid_config():
 
     # verify that exception is raised
     with pytest.raises(Exception) as _:
-        _ = tft.TemporalFusionTransformer(OmegaConf.create(configuration))
+        _ = tft.TemporalFusionTransformer(configuration)
 
     # set missing data_props
-    configuration['data_props'] = OmegaConf.create()
+    configuration['data_props'] = {}
 
     # verify that exception is raised
     with pytest.raises(Exception) as _:
-        _ = tft.TemporalFusionTransformer(OmegaConf.create(configuration))
+        _ = tft.TemporalFusionTransformer(configuration)
 
 
 def test_tft_without_categorical_vars():
@@ -151,7 +155,7 @@ def test_tft_without_categorical_vars():
         'data_props': data_props
     }
 
-    model = tft.TemporalFusionTransformer(OmegaConf.create(configuration))
+    model = tft.TemporalFusionTransformer(configuration)
 
     # create batch
     batch_size = 256
@@ -167,14 +171,17 @@ def test_tft_without_categorical_vars():
                                         dtype=torch.float32)
     }
 
-    batch_outputs = model(batch)
+    batch_outputs = model(
+        batch['historical_ts_numeric'],
+        torch.empty((batch_size, historical_steps, 0)),
+        batch['future_ts_numeric'],
+        torch.empty((batch_size, future_steps, 0)),
+        batch['static_feats_numeric'],
+        torch.empty((batch_size, 0)),
+    )
 
-    assert isinstance(batch_outputs, dict)
-    assert all([k in batch_outputs for k in ['predicted_quantiles',
-                                             'static_weights',
-                                             'historical_selection_weights',
-                                             'future_selection_weights',
-                                             'attention_scores']])
+    assert isinstance(batch_outputs, tuple)
+    assert len(batch_outputs) == 5
 
     num_quantiles = len(configuration['model']['output_quantiles'])
     num_static = data_props.get('num_static_numeric', 0) + data_props.get('num_static_categorical', 0)
@@ -216,7 +223,7 @@ def test_tft_without_numeric_vars():
         'data_props': data_props
     }
 
-    model = tft.TemporalFusionTransformer(OmegaConf.create(configuration))
+    model = tft.TemporalFusionTransformer(configuration)
 
     # create batch
     batch_size = 256
@@ -236,14 +243,17 @@ def test_tft_without_numeric_vars():
 
     }
 
-    batch_outputs = model(batch)
+    batch_outputs = model(
+        torch.empty((batch_size, historical_steps, 0)),
+        batch['historical_ts_categorical'],
+        torch.empty((batch_size, future_steps, 0)),
+        batch['future_ts_categorical'],
+        torch.empty((batch_size, 0)),
+        batch['static_feats_categorical'],
+    )
 
-    assert isinstance(batch_outputs, dict)
-    assert all([k in batch_outputs for k in ['predicted_quantiles',
-                                             'static_weights',
-                                             'historical_selection_weights',
-                                             'future_selection_weights',
-                                             'attention_scores']])
+    assert isinstance(batch_outputs, tuple)
+    assert len(batch_outputs) == 5
 
     num_quantiles = len(configuration['model']['output_quantiles'])
     num_static = data_props.get('num_static_numeric', 0) + data_props.get('num_static_categorical', 0)
@@ -260,26 +270,30 @@ def test_tft_without_numeric_vars():
                   num_static=num_static)
 
 
-def verify_output(batch_outputs,
-                  batch_size,
-                  future_steps,
-                  historical_steps,
-                  num_future,
-                  num_historical,
-                  num_quantiles,
-                  num_static):
-    assert len(batch_outputs['predicted_quantiles'].shape) == 3 and all(
-        [a == b for a, b in zip(batch_outputs['predicted_quantiles'].shape,
-                                [batch_size, future_steps, num_quantiles])])
-    assert len(batch_outputs['static_weights'].shape) == 2 and all(
-        [a == b for a, b in zip(batch_outputs['static_weights'].shape,
-                                [batch_size, num_static])])
-    assert len(batch_outputs['historical_selection_weights'].shape) == 3 and all(
-        [a == b for a, b in zip(batch_outputs['historical_selection_weights'].shape,
-                                [batch_size, historical_steps, num_historical])])
-    assert len(batch_outputs['future_selection_weights'].shape) == 3 and all(
-        [a == b for a, b in zip(batch_outputs['future_selection_weights'].shape,
-                                [batch_size, future_steps, num_future])])
-    assert len(batch_outputs['attention_scores'].shape) == 3 and all(
-        [a == b for a, b in zip(batch_outputs['attention_scores'].shape,
-                                [batch_size, future_steps, historical_steps + future_steps])])
+def verify_output(
+    batch_outputs,
+    batch_size,
+    future_steps,
+    historical_steps,
+    num_future,
+    num_historical,
+    num_quantiles,
+    num_static,
+):
+    predicted_quantiles, static_weights, hist_weights, fut_weights, attn = batch_outputs
+    assert len(predicted_quantiles.shape) == 3 and all(
+        a == b for a, b in zip(predicted_quantiles.shape, [batch_size, future_steps, num_quantiles])
+    )
+    assert len(static_weights.shape) == 2 and all(
+        a == b for a, b in zip(static_weights.shape, [batch_size, num_static])
+    )
+    assert len(hist_weights.shape) == 3 and all(
+        a == b for a, b in zip(hist_weights.shape, [batch_size, historical_steps, num_historical])
+    )
+    assert len(fut_weights.shape) == 3 and all(
+        a == b for a, b in zip(fut_weights.shape, [batch_size, future_steps, num_future])
+    )
+    assert len(attn.shape) == 3 and all(
+        a == b
+        for a, b in zip(attn.shape, [batch_size, future_steps, historical_steps + future_steps])
+    )

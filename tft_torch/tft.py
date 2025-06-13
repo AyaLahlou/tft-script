@@ -4,7 +4,6 @@ from typing import List, Dict, Tuple, Optional
 import torch
 from torch import nn
 import torch.nn.functional as F
-from omegaconf import DictConfig
 from tft_torch.base_blocks import TimeDistributed, NullTransform
 
 
@@ -35,7 +34,7 @@ class GatedLinearUnit(nn.Module):
         self.fc2 = nn.Linear(input_dim, input_dim)
         self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         sig = self.sigmoid(self.fc1(x))
         x = self.fc2(x)
         return torch.mul(sig, x)
@@ -109,7 +108,7 @@ class GatedResidualNetwork(nn.Module):
         self.gate = TimeDistributed(GatedLinearUnit(self.output_dim), batch_first=batch_first)
         self.layernorm = TimeDistributed(nn.LayerNorm(self.output_dim), batch_first=batch_first)
 
-    def forward(self, x, context=None):
+    def forward(self, x: torch.Tensor, context: Optional[torch.Tensor] = None) -> torch.Tensor:
 
         # compute residual (for skipping) if necessary
         if self.project_residual:
@@ -204,7 +203,9 @@ class VariableSelectionNetwork(nn.Module):
                                      dropout=self.dropout,
                                      batch_first=batch_first))
 
-    def forward(self, flattened_embedding, context=None):
+    def forward(
+        self, flattened_embedding: torch.Tensor, context: Optional[torch.Tensor] = None
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         # ===========================================================================
         # Infer variable selection weights - using the flattened representation GRN
         # ===========================================================================
@@ -303,7 +304,7 @@ class InputChannelEmbedding(nn.Module):
         if num_categorical == 0:
             self.categorical_transform = NullTransform()
 
-    def forward(self, x_numeric, x_categorical) -> torch.tensor:
+    def forward(self, x_numeric: torch.Tensor, x_categorical: torch.Tensor) -> torch.Tensor:
         batch_shape = x_numeric.shape if x_numeric.nelement() > 0 else x_categorical.shape
 
         processed_numeric = self.numeric_transform(x_numeric)
@@ -354,7 +355,7 @@ class NumericInputTransformation(nn.Module):
         for _ in range(self.num_inputs):
             self.numeric_projection_layers.append(nn.Linear(1, self.state_size))
 
-    def forward(self, x: torch.tensor) -> List[torch.tensor]:
+    def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
         # every input variable is projected using its dedicated linear layer,
         # the results are stored as a list
         projections = []
@@ -392,7 +393,7 @@ class CategoricalInputTransformation(nn.Module):
         for idx, cardinality in enumerate(self.cardinalities):
             self.categorical_embedding_layers.append(nn.Embedding(cardinality, self.state_size))
 
-    def forward(self, x: torch.tensor) -> List[torch.tensor]:
+    def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
         # every input variable is projected using its dedicated embedding layer,
         # the results are stored as a list
         embeddings = []
@@ -427,7 +428,7 @@ class GateAddNorm(nn.Module):
         self.gate = TimeDistributed(GatedLinearUnit(input_dim), batch_first=True)
         self.layernorm = TimeDistributed(nn.LayerNorm(input_dim), batch_first=True)
 
-    def forward(self, x, residual=None):
+    def forward(self, x: torch.Tensor, residual: Optional[torch.Tensor] = None) -> torch.Tensor:
         if self.dropout_rate:
             x = self.dropout_layer(x)
         x = self.gate(x)
@@ -473,7 +474,13 @@ class InterpretableMultiHeadAttention(nn.Module):
         # the last layer is used for final linear mapping (corresponds to W_H in the paper)
         self.out = nn.Linear(self.d_model, self.d_model)
 
-    def forward(self, q, k, v, mask=None):
+    def forward(
+        self,
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         num_samples = q.size(0)
 
         # Dimensions:
@@ -510,7 +517,13 @@ class InterpretableMultiHeadAttention(nn.Module):
 
         return output, attention_outputs, attention_scores
 
-    def attention(self, q, k, v, mask=None):
+    def attention(
+        self,
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         # Applying the scaled dot product
         attention_scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.d_model)
         # Dimensions:
@@ -541,7 +554,7 @@ class TemporalFusionTransformer(nn.Module):
 
     Parameters
     ----------
-    config: DictConfig
+    config: Dict
         A mapping describing both the expected structure of the input of the model, and the architectural specification
         of the model.
         This mapping should include a key named ``data_props`` in which the dimensions and cardinalities (where the
@@ -550,10 +563,9 @@ class TemporalFusionTransformer(nn.Module):
         which are required for creating the model.
     """
 
-    def __init__(self, config: DictConfig):
+    def __init__(self, config: Dict):
         super().__init__()
 
-        self.config = config
 
         # ============
         # data props
@@ -579,20 +591,23 @@ class TemporalFusionTransformer(nn.Module):
         # ============
         # model props
         # ============
-        self.task_type = config.task_type
-        self.attention_heads = config.model.attention_heads
-        self.dropout = config.model.dropout
-        self.lstm_layers = config.model.lstm_layers
-        self.target_window_start_idx = (config.target_window_start - 1) if config.target_window_start is not None else 0
+        self.task_type = config['task_type']
+        model_cfg = config['model']
+        self.attention_heads = model_cfg['attention_heads']
+        self.dropout = model_cfg['dropout']
+        self.lstm_layers = model_cfg['lstm_layers']
+        self.target_window_start_idx = (
+            config['target_window_start'] - 1
+        ) if config.get('target_window_start') is not None else 0
         if self.task_type == 'regression':
-            self.output_quantiles = config.model.output_quantiles
+            self.output_quantiles = model_cfg['output_quantiles']
             self.num_outputs = len(self.output_quantiles)
         elif self.task_type == 'classification':
             self.output_quantiles = None
             self.num_outputs = 1
         else:
             raise ValueError(f"unsupported task type: {self.task_type}")
-        self.state_size = config.model.state_size
+        self.state_size = model_cfg['state_size']
 
         # =====================
         # Input Transformation
@@ -698,10 +713,12 @@ class TemporalFusionTransformer(nn.Module):
         # ============================================================
         self.output_layer = nn.Linear(self.state_size, self.num_outputs)
 
-    def apply_temporal_selection(self, temporal_representation: torch.tensor,
-                                 static_selection_signal: torch.tensor,
+    def apply_temporal_selection(
+        self,
+        temporal_representation: torch.Tensor,
+        static_selection_signal: torch.Tensor,
                                  temporal_selection_module: VariableSelectionNetwork
-                                 ) -> Tuple[torch.tensor, torch.tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         num_samples, num_temporal_steps, _ = temporal_representation.shape
 
         # replicate the selection signal along time
@@ -735,7 +752,7 @@ class TemporalFusionTransformer(nn.Module):
         return temporal_selection_output, temporal_selection_weights
 
     @staticmethod
-    def replicate_along_time(static_signal: torch.tensor, time_steps: int) -> torch.tensor:
+    def replicate_along_time(static_signal: torch.Tensor, time_steps: int) -> torch.Tensor:
         """
         This method gets as an input a static_signal (non-temporal tensor) [num_samples x num_features],
         and replicates it along time for 'time_steps' times,
@@ -752,7 +769,7 @@ class TemporalFusionTransformer(nn.Module):
         return time_distributed_signal
 
     @staticmethod
-    def stack_time_steps_along_batch(temporal_signal: torch.tensor) -> torch.tensor:
+    def stack_time_steps_along_batch(temporal_signal: torch.Tensor) -> torch.Tensor:
         """
         This method gets as an input a temporal signal [num_samples x time_steps x num_features]
         and stacks the batch dimension and the temporal dimension on the same axis (dim=0).
@@ -761,7 +778,15 @@ class TemporalFusionTransformer(nn.Module):
         """
         return temporal_signal.view(-1, temporal_signal.size(-1))
 
-    def transform_inputs(self, batch: Dict[str, torch.tensor]) -> Tuple[torch.tensor, ...]:
+    def transform_inputs(
+        self,
+        historical_ts_numeric: torch.Tensor,
+        historical_ts_categorical: torch.Tensor,
+        future_ts_numeric: torch.Tensor,
+        future_ts_categorical: torch.Tensor,
+        static_feats_numeric: torch.Tensor,
+        static_feats_categorical: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         This method processes the batch and transform each input channel (historical_ts, future_ts, static)
         separately to eventually return the learned embedding for each of the input channels
@@ -774,18 +799,21 @@ class TemporalFusionTransformer(nn.Module):
         (i.e. dim=1 for the static features, dim=2 for the temporal data).
 
         """
-        empty_tensor = torch.empty((0, 0))
-
-        static_rep = self.static_transform(x_numeric=batch.get('static_feats_numeric', empty_tensor),
-                                           x_categorical=batch.get('static_feats_categorical', empty_tensor))
-        historical_ts_rep = self.historical_ts_transform(x_numeric=batch.get('historical_ts_numeric', empty_tensor),
-                                                         x_categorical=batch.get('historical_ts_categorical',
-                                                                                 empty_tensor))
-        future_ts_rep = self.future_ts_transform(x_numeric=batch.get('future_ts_numeric', empty_tensor),
-                                                 x_categorical=batch.get('future_ts_categorical', empty_tensor))
+        static_rep = self.static_transform(
+            x_numeric=static_feats_numeric,
+            x_categorical=static_feats_categorical,
+        )
+        historical_ts_rep = self.historical_ts_transform(
+            x_numeric=historical_ts_numeric,
+            x_categorical=historical_ts_categorical,
+        )
+        future_ts_rep = self.future_ts_transform(
+            x_numeric=future_ts_numeric,
+            x_categorical=future_ts_categorical,
+        )
         return future_ts_rep, historical_ts_rep, static_rep
 
-    def get_static_encoders(self, selected_static: torch.tensor) -> Tuple[torch.tensor, ...]:
+    def get_static_encoders(self, selected_static: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         This method processes the variable selection results for the static data, yielding signals which are designed
         to allow better integration of the information from static metadata.
@@ -802,8 +830,13 @@ class TemporalFusionTransformer(nn.Module):
         c_seq_cell = self.static_encoder_sequential_cell_init(selected_static)
         return c_enrichment, c_selection, c_seq_cell, c_seq_hidden
 
-    def apply_sequential_processing(self, selected_historical: torch.tensor, selected_future: torch.tensor,
-                                    c_seq_hidden: torch.tensor, c_seq_cell: torch.tensor) -> torch.tensor:
+    def apply_sequential_processing(
+        self,
+        selected_historical: torch.Tensor,
+        selected_future: torch.Tensor,
+        c_seq_hidden: torch.Tensor,
+        c_seq_cell: torch.Tensor,
+    ) -> torch.Tensor:
         """
         This part of the model is designated to mimic a sequence-to-sequence layer which will be used for local
         processing.
@@ -839,8 +872,11 @@ class TemporalFusionTransformer(nn.Module):
         gated_lstm_output = self.post_lstm_gating(lstm_output, residual=lstm_input)
         return gated_lstm_output
 
-    def apply_static_enrichment(self, gated_lstm_output: torch.tensor,
-                                static_enrichment_signal: torch.tensor) -> torch.tensor:
+    def apply_static_enrichment(
+        self,
+        gated_lstm_output: torch.Tensor,
+        static_enrichment_signal: torch.Tensor,
+    ) -> torch.Tensor:
         """
         This static enrichment stage enhances temporal features with static metadata using a GRN.
         The static enrichment signal is an output of a static covariate encoder, and the GRN is shared across time.
@@ -873,9 +909,12 @@ class TemporalFusionTransformer(nn.Module):
 
         return enriched_sequence
 
-    def apply_self_attention(self, enriched_sequence: torch.tensor,
-                             num_historical_steps: int,
-                             num_future_steps: int):
+    def apply_self_attention(
+        self,
+        enriched_sequence: torch.Tensor,
+        num_historical_steps: int,
+        num_future_steps: int,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         # create a mask - so that future steps will be exposed (able to attend) only to preceding steps
         output_sequence_length = num_future_steps - self.target_window_start_idx
         mask = torch.cat([torch.zeros(output_sequence_length,
@@ -909,14 +948,37 @@ class TemporalFusionTransformer(nn.Module):
 
         return gated_post_attention, attention_scores
 
-    def forward(self, batch):
+    def forward(
+        self,
+        historical_ts_numeric: torch.Tensor,
+        historical_ts_categorical: torch.Tensor,
+        future_ts_numeric: torch.Tensor,
+        future_ts_categorical: torch.Tensor,
+        static_feats_numeric: torch.Tensor,
+        static_feats_categorical: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # infer batch structure
-        num_samples, num_historical_steps, _ = batch[self.historical_ts_representative_key].shape
-        num_future_steps = batch[self.future_ts_representative_key].shape[1]
+        num_samples, num_historical_steps, _ = (
+            historical_ts_numeric.shape
+            if historical_ts_numeric.numel() > 0
+            else historical_ts_categorical.shape
+        )
+        num_future_steps = (
+            future_ts_numeric.shape[1]
+            if future_ts_numeric.numel() > 0
+            else future_ts_categorical.shape[1]
+        )
         # define output_sequence_length : num_future_steps - self.target_window_start_idx
 
         # =========== Transform all input channels ==============
-        future_ts_rep, historical_ts_rep, static_rep = self.transform_inputs(batch)
+        future_ts_rep, historical_ts_rep, static_rep = self.transform_inputs(
+            historical_ts_numeric,
+            historical_ts_categorical,
+            future_ts_numeric,
+            future_ts_categorical,
+            static_feats_numeric,
+            static_feats_categorical,
+        )
         # Dimensions:
         # static_rep: [num_samples x (total_num_static_inputs * state_size)]
         # historical_ts_rep: [num_samples x num_historical_steps x (total_num_historical_inputs * state_size)]
@@ -991,13 +1053,10 @@ class TemporalFusionTransformer(nn.Module):
         # Dimensions:
         # predicted_quantiles: [num_samples x num_future_steps x num_quantiles]
 
-        return {
-            'predicted_quantiles': predicted_quantiles,  # [num_samples x output_sequence_length x num_quantiles]
-            'static_weights': static_weights.squeeze(-1),  # [num_samples x num_static_inputs]
-            'historical_selection_weights': historical_selection_weights,
-            # [num_samples x num_historical_steps x total_num_historical_inputs]
-            'future_selection_weights': future_selection_weights,
-            # [num_samples x num_future_steps x total_num_future_inputs]
-            'attention_scores': attention_scores
-            # [num_samples x output_sequence_length x (num_historical_steps + num_future_steps)]
-        }
+        return (
+            predicted_quantiles,
+            static_weights.squeeze(-1),
+            historical_selection_weights,
+            future_selection_weights,
+            attention_scores,
+        )
