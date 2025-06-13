@@ -4,8 +4,8 @@ from typing import List, Dict, Tuple, Optional
 import torch
 from torch import nn
 import torch.nn.functional as F
-from omegaconf import DictConfig
 from tft_torch.base_blocks import TimeDistributed, NullTransform
+from typing import Dict, Tuple, List, Optional
 
 
 class GatedLinearUnit(nn.Module):
@@ -550,7 +550,7 @@ class TemporalFusionTransformer(nn.Module):
         which are required for creating the model.
     """
 
-    def __init__(self, config: DictConfig):
+    def __init__(self, config: dict):
         super().__init__()
 
         self.config = config
@@ -761,9 +761,15 @@ class TemporalFusionTransformer(nn.Module):
         """
         return temporal_signal.view(-1, temporal_signal.size(-1))
 
-    def transform_inputs(self, batch: Dict[str, torch.tensor]) -> Tuple[torch.tensor, ...]:
+    def transform_inputs(self,
+                           static_feats_numeric: torch.Tensor,
+                           static_feats_categorical: torch.Tensor,
+                           historical_ts_numeric: torch.Tensor,
+                           historical_ts_categorical: torch.Tensor,
+                           future_ts_numeric: torch.Tensor,
+                           future_ts_categorical: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         """
-        This method processes the batch and transform each input channel (historical_ts, future_ts, static)
+        This method processes input tensors and transforms each input channel (historical_ts, future_ts, static)
         separately to eventually return the learned embedding for each of the input channels
 
         each feature is embedded to a vector of state_size dimension:
@@ -774,15 +780,12 @@ class TemporalFusionTransformer(nn.Module):
         (i.e. dim=1 for the static features, dim=2 for the temporal data).
 
         """
-        empty_tensor = torch.empty((0, 0))
-
-        static_rep = self.static_transform(x_numeric=batch.get('static_feats_numeric', empty_tensor),
-                                           x_categorical=batch.get('static_feats_categorical', empty_tensor))
-        historical_ts_rep = self.historical_ts_transform(x_numeric=batch.get('historical_ts_numeric', empty_tensor),
-                                                         x_categorical=batch.get('historical_ts_categorical',
-                                                                                 empty_tensor))
-        future_ts_rep = self.future_ts_transform(x_numeric=batch.get('future_ts_numeric', empty_tensor),
-                                                 x_categorical=batch.get('future_ts_categorical', empty_tensor))
+        static_rep = self.static_transform(x_numeric=static_feats_numeric,
+                                           x_categorical=static_feats_categorical)
+        historical_ts_rep = self.historical_ts_transform(x_numeric=historical_ts_numeric,
+                                                         x_categorical=historical_ts_categorical)
+        future_ts_rep = self.future_ts_transform(x_numeric=future_ts_numeric,
+                                                 x_categorical=future_ts_categorical)
         return future_ts_rep, historical_ts_rep, static_rep
 
     def get_static_encoders(self, selected_static: torch.tensor) -> Tuple[torch.tensor, ...]:
@@ -909,14 +912,29 @@ class TemporalFusionTransformer(nn.Module):
 
         return gated_post_attention, attention_scores
 
-    def forward(self, batch):
-        # infer batch structure
-        num_samples, num_historical_steps, _ = batch[self.historical_ts_representative_key].shape
-        num_future_steps = batch[self.future_ts_representative_key].shape[1]
+    def forward(self,
+                static_feats_numeric: torch.Tensor,
+                static_feats_categorical: torch.Tensor,
+                historical_ts_numeric: torch.Tensor,
+                historical_ts_categorical: torch.Tensor,
+                future_ts_numeric: torch.Tensor,
+                future_ts_categorical: torch.Tensor) -> Dict[str, torch.Tensor]:
+        # infer input structure
+        historical_rep_key = historical_ts_numeric if self.num_historical_numeric > 0 else historical_ts_categorical
+        future_rep_key = future_ts_numeric if self.num_future_numeric > 0 else future_ts_categorical
+        
+        num_samples, num_historical_steps, _ = historical_rep_key.shape
+        num_future_steps = future_rep_key.shape[1]
         # define output_sequence_length : num_future_steps - self.target_window_start_idx
 
         # =========== Transform all input channels ==============
-        future_ts_rep, historical_ts_rep, static_rep = self.transform_inputs(batch)
+        future_ts_rep, historical_ts_rep, static_rep = self.transform_inputs(
+            static_feats_numeric=static_feats_numeric,
+            static_feats_categorical=static_feats_categorical,
+            historical_ts_numeric=historical_ts_numeric,
+            historical_ts_categorical=historical_ts_categorical,
+            future_ts_numeric=future_ts_numeric,
+            future_ts_categorical=future_ts_categorical)
         # Dimensions:
         # static_rep: [num_samples x (total_num_static_inputs * state_size)]
         # historical_ts_rep: [num_samples x num_historical_steps x (total_num_historical_inputs * state_size)]
@@ -992,12 +1010,9 @@ class TemporalFusionTransformer(nn.Module):
         # predicted_quantiles: [num_samples x num_future_steps x num_quantiles]
 
         return {
-            'predicted_quantiles': predicted_quantiles,  # [num_samples x output_sequence_length x num_quantiles]
-            'static_weights': static_weights.squeeze(-1),  # [num_samples x num_static_inputs]
+            'predicted_quantiles': predicted_quantiles,
+            'static_weights': static_weights.squeeze(-1),
             'historical_selection_weights': historical_selection_weights,
-            # [num_samples x num_historical_steps x total_num_historical_inputs]
             'future_selection_weights': future_selection_weights,
-            # [num_samples x num_future_steps x total_num_future_inputs]
             'attention_scores': attention_scores
-            # [num_samples x output_sequence_length x (num_historical_steps + num_future_steps)]
         }
