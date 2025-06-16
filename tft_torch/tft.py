@@ -6,6 +6,7 @@ from torch import nn
 import torch.nn.functional as F
 from tft_torch.base_blocks import TimeDistributed, NullTransform
 from typing import Dict, Tuple, List, Optional
+from torch.nn import Module
 
 
 class GatedLinearUnit(nn.Module):
@@ -66,92 +67,81 @@ class GatedResidualNetwork(nn.Module):
         A boolean indicating whether the batch dimension is expected to be the first dimension of the input or not.
     """
 
-    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int,
-                 dropout: Optional[float] = 0.05,
-                 context_dim: Optional[int] = None,
-                 batch_first: Optional[bool] = True):
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dim: int,
+        output_dim: int,
+        dropout: float = 0.05,
+        context_dim: Optional[int] = None,
+        batch_first: bool = True,
+    ):
         super().__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.output_dim = output_dim
         self.context_dim = context_dim
-        self.dropout = dropout
+        self.project_residual = (input_dim != output_dim)
 
-        # =================================================
-        # Input conditioning components (Eq.4 in the original paper)
-        # =================================================
-        # for using direct residual connection the dimension of the input must match the output dimension.
-        # otherwise, we'll need to project the input for creating this residual connection
-        # whether to project residual (if input/output dims differ)
-        self.project_residual = (self.input_dim != self.output_dim)
+        # 1) Primary projection + skip
+        self.fc1 = TimeDistributed(nn.Linear(input_dim, hidden_dim), batch_first=batch_first)
+        if self.project_residual:
+            self.skip_layer = TimeDistributed(
+                nn.Linear(input_dim, output_dim, bias=False), batch_first=batch_first
+            )
+        else:
+            self.skip_layer = TimeDistributed(NullTransform(), batch_first=batch_first)
 
-        # primary projection
-        self.fc1 = TimeDistributed(
-            nn.Linear(self.input_dim, self.hidden_dim),
-            batch_first=batch_first
+        # 2) Nonlinearity + second projection
+        self.elu1 = nn.ELU()
+        self.fc2  = TimeDistributed(nn.Linear(hidden_dim, output_dim), batch_first=batch_first)
+
+        # 3) Dropout + gating
+        self.dropout   = nn.Dropout(dropout)
+        # only one gating module – we’ll use this
+        self.gate_layer = TimeDistributed(
+            nn.Sequential(
+                nn.Linear(output_dim, output_dim),
+                nn.Sigmoid()
+            ),
+            batch_first=batch_first,
         )
 
-        # skip-layer: always defined so TorchScript sees it
-        if self.project_residual:
-            # maps input_dim → output_dim to match residual
-            self.skip_layer = TimeDistributed(
-                nn.Linear(self.input_dim, self.output_dim, bias=False),
+        # 4) LayerNorm (name matches forward)
+        self.layer_norm = TimeDistributed(nn.LayerNorm(output_dim), batch_first=batch_first)
+
+        # 5) Context projection (always defined)
+        if context_dim is not None:
+            self.context_projection = TimeDistributed(
+                nn.Linear(context_dim, hidden_dim, bias=False),
                 batch_first=batch_first
             )
         else:
-            # identity (no-op) when dims already match
-            self.skip_layer = TimeDistributed(
-                NullTransform(),
-                batch_first=batch_first
-            )
-        # non-linearity to be applied on the sum of the projections
-        self.elu1 = nn.ELU()
+            self.context_projection = TimeDistributed(NullTransform(), batch_first=batch_first)
 
-        # ============================================================
-        # Further projection components (Eq.3 in the original paper)
-        # ============================================================
-        # additional projection on top of the non-linearity
-        self.fc2 = TimeDistributed(nn.Linear(self.hidden_dim, self.output_dim), batch_first=batch_first)
+    def forward(
+        self,
+        x: torch.Tensor,
+        context: Optional[torch.Tensor]
+    ) -> torch.Tensor:
+        # residual path
+        residual = self.skip_layer(x)
 
-        # ============================================================
-        # Output gating components (Eq.2 in the original paper)
-        # ============================================================
-        self.dropout = nn.Dropout(self.dropout)
-        self.gate = TimeDistributed(GatedLinearUnit(self.output_dim), batch_first=batch_first)
-        self.layernorm = TimeDistributed(nn.LayerNorm(self.output_dim), batch_first=batch_first)
-
-    def forward(self, x, context=None):
-
-        # compute residual (for skipping) if necessary
-        residual = self.skip_layer(x) if self.project_residual else x
-        # ===========================
-        # Compute Eq.4
-        # ===========================
+        # primary path
         x = self.fc1(x)
         if self.context_dim is not None and context is not None:
-            context = self.context_projection(context)
-            x = x + context
-            
-        # compute eta_2 (according to paper)
-        x = self.elu1(x)
+            x = x + self.context_projection(context)
 
-        # ===========================
-        # Compute Eq.3
-        # ===========================
-        # compute eta_1 (according to paper)
+        # second projection + nonlinearity + dropout + gating
         x = self.fc2(x)
-
-        # ===========================
-        # Compute Eq.2
-        # ===========================
+        x = self.elu1(x)
         x = self.dropout(x)
-        x = self.gate(x)
-        # perform skipping using the residual
-        x = x + residual
-        # apply normalization layer
-        x = self.layernorm(x)
+        gate = self.gate_layer(x)
+        x = x * gate
 
-        return x
+        # add residual + normalize
+        x = x + residual
+        return self.layer_norm(x)
 
 
 class VariableSelectionNetwork(nn.Module):
@@ -211,48 +201,44 @@ class VariableSelectionNetwork(nn.Module):
                                      output_dim=self.hidden_dim,
                                      dropout=self.dropout,
                                      batch_first=batch_first))
-
-    def forward(self, flattened_embedding, context=None):
+    def forward(
+        self,
+        flattened_embedding: torch.Tensor,
+        context: Optional[torch.Tensor]
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         # ===========================================================================
-        # Infer variable selection weights - using the flattened representation GRN
+        # Infer variable selection weights – using the flattened representation GRN
         # ===========================================================================
-        # the flattened embedding should be of shape [(num_samples * num_temporal_steps) x (num_inputs x input_dim)]
-        # where in our case input_dim represents the model_dim or the state_size.
-        # in the case of static variables selection, num_temporal_steps is disregarded and can be thought of as 1.
+        # `flattened_embedding` shape: (num_samples * num_temporal_steps, num_inputs * input_dim)
         sparse_weights = self.flattened_grn(flattened_embedding, context)
         sparse_weights = self.softmax(sparse_weights).unsqueeze(2)
-        # After that step "sparse_weights" is of shape [(num_samples * num_temporal_steps) x num_inputs x 1]
+        # sparse_weights shape: (num_samples * num_temporal_steps, num_inputs, 1)
 
-        # Before weighting the variables - apply a GRN on each transformed input
+        # ===========================================================================
+        # Apply a dedicated GRN to each variable embedding
+        # ===========================================================================
         processed_inputs: List[torch.Tensor] = []
         for idx, grn in enumerate(self.single_variable_grns):
-            # compute slice bounds
             start = idx * self.input_dim
             end   = (idx + 1) * self.input_dim
-            # select that variable's embedding
-            inp = flattened_embedding[..., start:end]  # shape: (batch*time, input_dim)
-            # apply its GRN
-            processed_inputs.append(grn(inp))
-        # each element in the resulting list is of size: [(num_samples * num_temporal_steps) x state_size],
-        # and each element corresponds to a single input variable
+            # slice out this variable’s features
+            inp = flattened_embedding[..., start:end]  # (batch*time, input_dim)
+            # transform via its GRN
+            processed_inputs.append(grn(inp, context))
+        # processed_inputs: list of Tensors each (batch*time, hidden_dim)
 
-        # combine the outputs of the single-var GRNs (along an additional axis)
+        # stack into shape (batch*time, hidden_dim, num_inputs)
         processed_inputs = torch.stack(processed_inputs, dim=-1)
-        # Dimensions:
-        # processed_inputs: [(num_samples * num_temporal_steps) x state_size x num_inputs]
 
-        # weigh them by multiplying with the weights tensor viewed as
-        # [(num_samples * num_temporal_steps) x 1 x num_inputs]
-        # so that the weight given to each input variable (for each time-step/observation) multiplies the entire state
-        # vector representing the specific input variable on this specific time-step
-        outputs = processed_inputs * sparse_weights.transpose(1, 2)
-        # Dimensions:
-        # outputs: [(num_samples * num_temporal_steps) x state_size x num_inputs]
-
-        # and finally sum up - for creating a weighted sum representation of width state_size for every time-step
-        outputs = outputs.sum(axis=-1)
-        # Dimensions:
-        # outputs: [(num_samples * num_temporal_steps) x state_size]
+        # ===========================================================================
+        # Weight & sum to get final representation
+        # ===========================================================================
+        # sparse_weights: (batch*time, num_inputs, 1) -> transpose -> (batch*time, 1, num_inputs)
+        weights_t = sparse_weights.transpose(1, 2)
+        # elementwise multiply: (batch*time, hidden_dim, num_inputs)
+        weighted = processed_inputs * weights_t
+        # sum over the inputs axis -> (batch*time, hidden_dim)
+        outputs = weighted.sum(dim=-1)
 
         return outputs, sparse_weights
 
@@ -432,40 +418,44 @@ class CategoricalInputTransformation(nn.Module):
 
 class GateAddNorm(nn.Module):
     """
-    This module encapsulates an operation performed multiple times across the TemporalFusionTransformer model.
-    The composite operation includes:
-    a. A *Dropout* layer.
-    b. Gating using a ``GatedLinearUnit``.
-    c. A residual connection to an "earlier" signal from the forward pass of the parent model.
-    d. Layer normalization.
-
-    Parameters
-    ----------
-    input_dim: int
-        The dimension associated with the expected input of this module.
-    dropout: Optional[float]
-        The dropout rate associated with the component.
+    A composite of:
+      1) Dropout
+      2) GatedLinearUnit
+      3) Residual add
+      4) LayerNorm
+    TorchScript–compatible.
     """
 
     def __init__(self, input_dim: int, dropout: Optional[float] = None):
-        super(GateAddNorm, self).__init__()
-        self.dropout_rate = dropout
-        if dropout:
-            self.dropout_layer = nn.Dropout(self.dropout_rate)
+        super().__init__()
+        # always a float
+        self.dropout_rate = dropout if dropout is not None else 0.0
+        # always defined (if rate=0, this is a no-op)
+        self.dropout_layer = nn.Dropout(self.dropout_rate)
+
+        # gating step
         self.gate = TimeDistributed(GatedLinearUnit(input_dim), batch_first=True)
+        # normalization step
         self.layernorm = TimeDistributed(nn.LayerNorm(input_dim), batch_first=True)
 
-    def forward(self, x, residual=None):
-        if self.dropout_rate:
+    def forward(
+        self,
+        x: torch.Tensor,
+        residual: Optional[torch.Tensor]
+    ) -> torch.Tensor:
+        # only apply dropout if rate > 0
+        if self.dropout_rate > 0.0:
             x = self.dropout_layer(x)
+
+        # gating
         x = self.gate(x)
-        # perform skipping
+
+        # residual connection if provided
         if residual is not None:
             x = x + residual
-        # apply normalization layer
-        x = self.layernorm(x)
 
-        return x
+        # final normalization
+        return self.layernorm(x)
 
 
 class InterpretableMultiHeadAttention(nn.Module):
@@ -726,10 +716,12 @@ class TemporalFusionTransformer(nn.Module):
         # ============================================================
         self.output_layer = nn.Linear(self.state_size, self.num_outputs)
 
-    def apply_temporal_selection(self, temporal_representation: torch.tensor,
-                                 static_selection_signal: torch.tensor,
-                                 temporal_selection_module: VariableSelectionNetwork
-                                 ) -> Tuple[torch.tensor, torch.tensor]:
+    def apply_temporal_selection(
+        self,
+        temporal_representation: torch.Tensor,
+        static_selection_signal: torch.Tensor,
+        temporal_selection_module
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         num_samples, num_temporal_steps, _ = temporal_representation.shape
 
         # replicate the selection signal along time
@@ -747,8 +739,10 @@ class TemporalFusionTransformer(nn.Module):
         # time_distributed_context: [(num_samples * num_temporal_steps) x state_size]
 
         # applying the selection module across time
-        temporal_selection_output, temporal_selection_weights = temporal_selection_module(
-            flattened_embedding=temporal_flattened_embedding, context=time_distributed_context)
+        temporal_selection_output, temporal_selection_weights = temporal_selection_module.forward(
+            temporal_flattened_embedding,
+            time_distributed_context
+        )
         # Dimensions:
         # temporal_selection_output: [(num_samples * num_temporal_steps) x state_size]
         # temporal_selection_weights: [(num_samples * num_temporal_steps) x (num_temporal_inputs) x 1]
@@ -763,7 +757,7 @@ class TemporalFusionTransformer(nn.Module):
         return temporal_selection_output, temporal_selection_weights
 
     @staticmethod
-    def replicate_along_time(static_signal: torch.tensor, time_steps: int) -> torch.tensor:
+    def replicate_along_time(static_signal: torch.Tensor, time_steps: int) -> torch.Tensor:
         """
         This method gets as an input a static_signal (non-temporal tensor) [num_samples x num_features],
         and replicates it along time for 'time_steps' times,
@@ -780,7 +774,7 @@ class TemporalFusionTransformer(nn.Module):
         return time_distributed_signal
 
     @staticmethod
-    def stack_time_steps_along_batch(temporal_signal: torch.tensor) -> torch.tensor:
+    def stack_time_steps_along_batch(temporal_signal: torch.Tensor) -> torch.Tensor:
         """
         This method gets as an input a temporal signal [num_samples x time_steps x num_features]
         and stacks the batch dimension and the temporal dimension on the same axis (dim=0).
@@ -795,7 +789,7 @@ class TemporalFusionTransformer(nn.Module):
                            historical_ts_numeric: torch.Tensor,
                            historical_ts_categorical: torch.Tensor,
                            future_ts_numeric: torch.Tensor,
-                           future_ts_categorical: torch.Tensor) -> Tuple[torch.Tensor, ...]:
+                           future_ts_categorical: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         This method processes input tensors and transforms each input channel (historical_ts, future_ts, static)
         separately to eventually return the learned embedding for each of the input channels
@@ -816,7 +810,7 @@ class TemporalFusionTransformer(nn.Module):
                                                  x_categorical=future_ts_categorical)
         return future_ts_rep, historical_ts_rep, static_rep
 
-    def get_static_encoders(self, selected_static: torch.tensor) -> Tuple[torch.tensor, ...]:
+    def get_static_encoders(self, selected_static: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         This method processes the variable selection results for the static data, yielding signals which are designed
         to allow better integration of the information from static metadata.
@@ -827,14 +821,14 @@ class TemporalFusionTransformer(nn.Module):
         c_seq_hidden & c_seq_cell will be used both for local processing of temporal features
         c_enrichment will be used for enriching temporal features with static information.
         """
-        c_selection = self.static_encoder_selection(selected_static)
-        c_enrichment = self.static_encoder_enrichment(selected_static)
-        c_seq_hidden = self.static_encoder_sequential_state_init(selected_static)
-        c_seq_cell = self.static_encoder_sequential_cell_init(selected_static)
+        c_selection = self.static_encoder_selection(selected_static, context=None)
+        c_enrichment = self.static_encoder_enrichment(selected_static, context=None)
+        c_seq_hidden = self.static_encoder_sequential_state_init(selected_static, context=None)
+        c_seq_cell = self.static_encoder_sequential_cell_init(selected_static, context=None)
         return c_enrichment, c_selection, c_seq_cell, c_seq_hidden
 
-    def apply_sequential_processing(self, selected_historical: torch.tensor, selected_future: torch.tensor,
-                                    c_seq_hidden: torch.tensor, c_seq_cell: torch.tensor) -> torch.tensor:
+    def apply_sequential_processing(self, selected_historical: torch.Tensor, selected_future: torch.Tensor,
+                                    c_seq_hidden: torch.Tensor, c_seq_cell: torch.Tensor) -> torch.Tensor:
         """
         This part of the model is designated to mimic a sequence-to-sequence layer which will be used for local
         processing.
@@ -870,8 +864,8 @@ class TemporalFusionTransformer(nn.Module):
         gated_lstm_output = self.post_lstm_gating(lstm_output, residual=lstm_input)
         return gated_lstm_output
 
-    def apply_static_enrichment(self, gated_lstm_output: torch.tensor,
-                                static_enrichment_signal: torch.tensor) -> torch.tensor:
+    def apply_static_enrichment(self, gated_lstm_output: torch.Tensor,
+                                static_enrichment_signal: torch.Tensor) -> torch.Tensor:
         """
         This static enrichment stage enhances temporal features with static metadata using a GRN.
         The static enrichment signal is an output of a static covariate encoder, and the GRN is shared across time.
@@ -904,7 +898,7 @@ class TemporalFusionTransformer(nn.Module):
 
         return enriched_sequence
 
-    def apply_self_attention(self, enriched_sequence: torch.tensor,
+    def apply_self_attention(self, enriched_sequence: torch.Tensor,
                              num_historical_steps: int,
                              num_future_steps: int):
         # create a mask - so that future steps will be exposed (able to attend) only to preceding steps
@@ -923,7 +917,7 @@ class TemporalFusionTransformer(nn.Module):
             q=enriched_sequence[:, (num_historical_steps + self.target_window_start_idx):, :],  # query
             k=enriched_sequence,  # keys
             v=enriched_sequence,  # values
-            mask=mask.bool())
+            mask=mask.to(torch.bool))
         # Dimensions:
         # post_attention: [num_samples x num_future_steps x state_size]
         # attention_outputs: [num_samples x num_future_steps x state_size]
@@ -976,7 +970,7 @@ class TemporalFusionTransformer(nn.Module):
         # future_ts_rep: [num_samples x num_future_steps x (total_num_future_inputs * state_size)]
 
         # =========== Static Variables Selection ==============
-        selected_static, static_weights = self.static_selection(static_rep)
+        selected_static, static_weights = self.static_selection(static_rep, None)
         # Dimensions:
         # selected_static: [num_samples x state_size]
         # static_weights: [num_samples x num_static_inputs x 1]
@@ -985,20 +979,38 @@ class TemporalFusionTransformer(nn.Module):
         c_enrichment, c_selection, c_seq_cell, c_seq_hidden = self.get_static_encoders(selected_static)
         # each of the static encoders signals is of shape: [num_samples x state_size]
 
-        # =========== Historical variables selection ==============
-        selected_historical, historical_selection_weights = self.apply_temporal_selection(
-            temporal_representation=historical_ts_rep,
-            static_selection_signal=c_selection,
-            temporal_selection_module=self.historical_ts_selection)
-        # Dimensions:
-        # selected_historical: [num_samples x num_historical_steps x state_size]
-        # historical_selection_weights: [num_samples x num_historical_steps x total_num_historical_inputs]
+        # =========== Historical variables selection ============
+        # historical_ts_rep: (batch, time, state_size)
+        batch_size, hist_steps, _ = historical_ts_rep.shape
+        # flatten across time: (batch*time, state_size)
+        hist_flat = historical_ts_rep.reshape(batch_size * hist_steps, -1)
+        # repeat static selection for each time‐step
+        # c_selection: (batch, state_size) → (batch, time, state_size) → (batch*time, state_size)
+        static_ctx = c_selection.unsqueeze(1).expand(batch_size, hist_steps, -1).reshape(batch_size * hist_steps, -1)
+        # call the GRN forward explicitly
+        selected_historical, historical_selection_weights = self.historical_ts_selection.forward(
+            hist_flat,
+            static_ctx
+        )
+        # reshape back: (batch, time, state_size)
+        selected_historical = selected_historical.view(batch_size, hist_steps, -1)
 
-        # =========== Future variables selection ==============
-        selected_future, future_selection_weights = self.apply_temporal_selection(
-            temporal_representation=future_ts_rep,
-            static_selection_signal=c_selection,
-            temporal_selection_module=self.future_ts_selection)
+
+        # =========== Future variables selection ============
+        # future_ts_rep: (batch, time, state_size)
+        batch_size2, fut_steps, _ = future_ts_rep.shape
+        # flatten across time
+        fut_flat = future_ts_rep.reshape(batch_size2 * fut_steps, -1)
+        # same static context for future steps
+        static_ctx2 = c_selection.unsqueeze(1).expand(batch_size2, fut_steps, -1).reshape(batch_size2 * fut_steps, -1)
+        # call the future selector
+        selected_future, future_selection_weights = self.future_ts_selection.forward(
+            fut_flat,
+            static_ctx2
+        )
+        # reshape back: (batch, time, state_size)
+        selected_future = selected_future.view(batch_size2, fut_steps, -1)
+
         # Dimensions:
         # selected_future: [num_samples x num_future_steps x state_size]
         # future_selection_weights: [num_samples x num_future_steps x total_num_future_inputs]
@@ -1028,7 +1040,7 @@ class TemporalFusionTransformer(nn.Module):
         # =========== position-wise feed-forward ==============
         # Applying an additional non-linear processing to the outputs of the self-attention layer using a GRN,
         # where its weights are shared across the entire layer
-        post_poswise_ff_grn = self.pos_wise_ff_grn(gated_post_attention)
+        post_poswise_ff_grn = self.pos_wise_ff_grn(gated_post_attention, None)
         # Also applying a gated residual connection skipping over the
         # attention block (using sequential processing output), providing a direct path to the sequence-to-sequence
         # layer, yielding a simpler model if additional complexity is not required
