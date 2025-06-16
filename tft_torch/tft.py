@@ -286,10 +286,10 @@ class InputChannelEmbedding(nn.Module):
 
         if self.time_distribute:
             self.numeric_transform = TimeDistributed(
-                NumericInputTransformation(num_inputs=num_numeric, state_size=state_size), return_reshaped=False)
+                NumericInputTransformation(num_inputs=num_numeric, state_size=state_size))
             self.categorical_transform = TimeDistributed(
                 CategoricalInputTransformation(num_inputs=num_categorical, state_size=state_size,
-                                               cardinalities=categorical_cardinalities), return_reshaped=False)
+                                               cardinalities=categorical_cardinalities))
         else:
             self.numeric_transform = NumericInputTransformation(num_inputs=num_numeric, state_size=state_size)
             self.categorical_transform = CategoricalInputTransformation(num_inputs=num_categorical,
@@ -303,31 +303,48 @@ class InputChannelEmbedding(nn.Module):
         if num_categorical == 0:
             self.categorical_transform = NullTransform()
 
-    def forward(self, x_numeric, x_categorical) -> torch.tensor:
-        batch_shape = x_numeric.shape if x_numeric.nelement() > 0 else x_categorical.shape
+    def forward(self, x_numeric, x_categorical) -> torch.Tensor:
+        if x_numeric.numel() > 0:
+            batch_size, seq_len = x_numeric.shape[0], x_numeric.shape[1] if len(x_numeric.shape) > 1 else 1
+        else:
+            batch_size, seq_len = x_categorical.shape[0], x_categorical.shape[1] if len(x_categorical.shape) > 1 else 1
 
         processed_numeric = self.numeric_transform(x_numeric)
         processed_categorical = self.categorical_transform(x_categorical)
+
+        # Ensure processed_numeric and processed_categorical are always lists
+        if not isinstance(processed_numeric, list):
+            processed_numeric = [processed_numeric] if processed_numeric.numel() > 0 else []
+        if not isinstance(processed_categorical, list):
+            processed_categorical = [processed_categorical] if processed_categorical.numel() > 0 else []
+
+        # Combine the processed features
+        if len(processed_numeric) > 0 and len(processed_categorical) > 0:
+            all_processed = torch.cat(processed_numeric + processed_categorical, dim=1)
+        elif len(processed_numeric) > 0:
+            all_processed = torch.cat(processed_numeric, dim=1)
+        elif len(processed_categorical) > 0:
+            all_processed = torch.cat(processed_categorical, dim=1)
+        else:
+            # Create empty tensor with appropriate dimensions
+            if self.time_distribute:
+                all_processed = torch.empty(batch_size, seq_len, 0, device=x_numeric.device if x_numeric.numel() > 0 else x_categorical.device)
+            else:
+                all_processed = torch.empty(batch_size, 0, device=x_numeric.device if x_numeric.numel() > 0 else x_categorical.device)
+        
+        # For temporal data, reshape to 3D tensor
+        if self.time_distribute and all_processed.size(1) > 0:
+            merged_transformations = all_processed.view(batch_size, seq_len, -1)
+        else:
+            merged_transformations = all_processed
+        
+        return merged_transformations
         # Both of the returned values, "processed_numeric" and "processed_categorical" are lists,
         # with "num_numeric" elements and "num_categorical" respectively - each element in these lists corresponds
         # to a single input variable, and is represent by its embedding, shaped as:
         # [(num_samples * num_temporal_steps) x state_size]
         # (for the static input channel, num_temporal_steps is irrelevant and can be treated as 1
 
-        # the resulting embeddings for all the input varaibles are concatenated to a flattened representation
-        merged_transformations = torch.cat(processed_numeric + processed_categorical, dim=1)
-        # Dimensions:
-        # merged_transformations: [(num_samples * num_temporal_steps) x (state_size * total_input_variables)]
-        # total_input_variables stands for the amount of all input variables in the specific input channel, i.e
-        # num_numeric + num_categorical
-
-        # for temporal data we return the resulting tensor to its 3-dimensional shape
-        if self.time_distribute:
-            merged_transformations = merged_transformations.view(batch_shape[0], batch_shape[1], -1)
-            # In that case:
-            # merged_transformations: [num_samples x num_temporal_steps x (state_size * total_input_variables)]
-
-        return merged_transformations
 
 
 class NumericInputTransformation(nn.Module):
@@ -354,12 +371,12 @@ class NumericInputTransformation(nn.Module):
         for _ in range(self.num_inputs):
             self.numeric_projection_layers.append(nn.Linear(1, self.state_size))
 
-    def forward(self, x: torch.tensor) -> List[torch.tensor]:
+    def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
         # every input variable is projected using its dedicated linear layer,
         # the results are stored as a list
         projections = []
-        for i in range(self.num_inputs):
-            projections.append(self.numeric_projection_layers[i](x[:, [i]]))
+        for i, layer in enumerate(self.numeric_projection_layers):
+            projections.append(layer(x[:, [i]]))
 
         return projections
 
@@ -392,12 +409,12 @@ class CategoricalInputTransformation(nn.Module):
         for idx, cardinality in enumerate(self.cardinalities):
             self.categorical_embedding_layers.append(nn.Embedding(cardinality, self.state_size))
 
-    def forward(self, x: torch.tensor) -> List[torch.tensor]:
+    def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
         # every input variable is projected using its dedicated embedding layer,
         # the results are stored as a list
         embeddings = []
-        for i in range(self.num_inputs):
-            embeddings.append(self.categorical_embedding_layers[i](x[:, i]))
+        for i, layer in enumerate(self.categorical_embedding_layers):
+            embeddings.append(layer(x[:, i]))
 
         return embeddings
 
@@ -919,9 +936,16 @@ class TemporalFusionTransformer(nn.Module):
                 historical_ts_categorical: torch.Tensor,
                 future_ts_numeric: torch.Tensor,
                 future_ts_categorical: torch.Tensor) -> Dict[str, torch.Tensor]:
-        # infer input structure
-        historical_rep_key = historical_ts_numeric if self.num_historical_numeric > 0 else historical_ts_categorical
-        future_rep_key = future_ts_numeric if self.num_future_numeric > 0 else future_ts_categorical
+        # infer input structure - refactored for TorchScript compatibility
+        if self.num_historical_numeric > 0:
+            historical_rep_key = historical_ts_numeric
+        else:
+            historical_rep_key = historical_ts_categorical
+        
+        if self.num_future_numeric > 0:
+            future_rep_key = future_ts_numeric
+        else:
+            future_rep_key = future_ts_categorical
         
         num_samples, num_historical_steps, _ = historical_rep_key.shape
         num_future_steps = future_rep_key.shape[1]
