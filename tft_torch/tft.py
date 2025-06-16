@@ -70,11 +70,11 @@ class GatedResidualNetwork(nn.Module):
                  dropout: Optional[float] = 0.05,
                  context_dim: Optional[int] = None,
                  batch_first: Optional[bool] = True):
-        super(GatedResidualNetwork, self).__init__()
+        super().__init__()
         self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
         self.output_dim = output_dim
         self.context_dim = context_dim
-        self.hidden_dim = hidden_dim
         self.dropout = dropout
 
         # =================================================
@@ -82,17 +82,28 @@ class GatedResidualNetwork(nn.Module):
         # =================================================
         # for using direct residual connection the dimension of the input must match the output dimension.
         # otherwise, we'll need to project the input for creating this residual connection
-        self.project_residual: bool = self.input_dim != self.output_dim
+        # whether to project residual (if input/output dims differ)
+        self.project_residual = (self.input_dim != self.output_dim)
+
+        # primary projection
+        self.fc1 = TimeDistributed(
+            nn.Linear(self.input_dim, self.hidden_dim),
+            batch_first=batch_first
+        )
+
+        # skip-layer: always defined so TorchScript sees it
         if self.project_residual:
-            self.skip_layer = TimeDistributed(nn.Linear(self.input_dim, self.output_dim))
-
-        # A linear layer for projecting the primary input (acts across time if necessary)
-        self.fc1 = TimeDistributed(nn.Linear(self.input_dim, self.hidden_dim), batch_first=batch_first)
-
-        # In case we expect context input, an additional linear layer will project the context
-        if self.context_dim is not None:
-            self.context_projection = TimeDistributed(nn.Linear(self.context_dim, self.hidden_dim, bias=False),
-                                                      batch_first=batch_first)
+            # maps input_dim → output_dim to match residual
+            self.skip_layer = TimeDistributed(
+                nn.Linear(self.input_dim, self.output_dim, bias=False),
+                batch_first=batch_first
+            )
+        else:
+            # identity (no-op) when dims already match
+            self.skip_layer = TimeDistributed(
+                NullTransform(),
+                batch_first=batch_first
+            )
         # non-linearity to be applied on the sum of the projections
         self.elu1 = nn.ELU()
 
@@ -112,18 +123,15 @@ class GatedResidualNetwork(nn.Module):
     def forward(self, x, context=None):
 
         # compute residual (for skipping) if necessary
-        if self.project_residual:
-            residual = self.skip_layer(x)
-        else:
-            residual = x
+        residual = self.skip_layer(x) if self.project_residual else x
         # ===========================
         # Compute Eq.4
         # ===========================
         x = self.fc1(x)
-        if context is not None:
+        if self.context_dim is not None and context is not None:
             context = self.context_projection(context)
             x = x + context
-
+            
         # compute eta_2 (according to paper)
         x = self.elu1(x)
 
@@ -216,12 +224,15 @@ class VariableSelectionNetwork(nn.Module):
         # After that step "sparse_weights" is of shape [(num_samples * num_temporal_steps) x num_inputs x 1]
 
         # Before weighting the variables - apply a GRN on each transformed input
-        processed_inputs = []
-        for i in range(self.num_inputs):
-            # select slice of embedding belonging to a single input - and apply the variable-specific GRN
-            # (the slice is taken from the flattened concatenated embedding)
-            processed_inputs.append(
-                self.single_variable_grns[i](flattened_embedding[..., (i * self.input_dim): (i + 1) * self.input_dim]))
+        processed_inputs: List[torch.Tensor] = []
+        for idx, grn in enumerate(self.single_variable_grns):
+            # compute slice bounds
+            start = idx * self.input_dim
+            end   = (idx + 1) * self.input_dim
+            # select that variable's embedding
+            inp = flattened_embedding[..., start:end]  # shape: (batch*time, input_dim)
+            # apply its GRN
+            processed_inputs.append(grn(inp))
         # each element in the resulting list is of size: [(num_samples * num_temporal_steps) x state_size],
         # and each element corresponds to a single input variable
 

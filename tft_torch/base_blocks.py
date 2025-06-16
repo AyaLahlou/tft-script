@@ -14,19 +14,37 @@ class TimeDistributed(nn.Module):
         self.batch_first = batch_first
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # If no time dimension, add one so flatten() logic is uniform
         if x.dim() <= 2:
-            return self.module(x)
+            if self.batch_first:
+                x = x.unsqueeze(1)  # (batch, 1, features)
+            else:
+                x = x.unsqueeze(0)  # (1, time, features)
 
-        # Squash samples and timesteps
-        x_reshape = x.flatten(0, 1) if self.batch_first else x.flatten(1, 2).transpose(0, 1)
-        y = self.module(x_reshape)
-
-        # Reshape back to original dimensions
+        # Flatten batch & time dims into one for the wrapped module
         if self.batch_first:
-            y = y.view(x.size(0), -1, y.size(-1))
+            # (batch, time, features) -> (batch*time, features)
+            x_reshape = x.flatten(0, 1)
         else:
-            y = y.view(-1, x.size(1), y.size(-1)).transpose(0, 1)
-        return y
+            # (time, batch, features) -> (batch*time, features)
+            x_reshape = x.flatten(1, 2).transpose(0, 1)
+
+        # Apply the wrapped module
+        raw = self.module(x_reshape)
+
+        # If it returned a list of tensors, stack into one Tensor
+        if isinstance(raw, list):
+            y = torch.stack(raw, dim=0)
+        else:
+            y = raw
+
+        # Reshape back to (batch, time, features)
+        if self.batch_first:
+            # y: (batch*time, features) -> (batch, time, features)
+            return y.view(x.size(0), -1, y.size(-1))
+        else:
+            # y: (batch*time, features) -> (time, batch, features)
+            return y.view(-1, x.size(1), y.size(-1)).transpose(0, 1)
 
 
 class NullTransform(nn.Module):
