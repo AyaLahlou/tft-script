@@ -960,7 +960,7 @@ class TemporalFusionTransformer(nn.Module):
                 historical_ts_numeric: torch.Tensor,
                 historical_ts_categorical: torch.Tensor,
                 future_ts_numeric: torch.Tensor,
-                future_ts_categorical: torch.Tensor) -> Dict[str, torch.Tensor]:
+                future_ts_categorical: torch.Tensor) -> torch.Tensor:
         # infer input structure - refactored for TorchScript compatibility
         if self.num_historical_numeric > 0:
             historical_rep_key = historical_ts_numeric
@@ -1094,10 +1094,9 @@ class TemporalFusionTransformer(nn.Module):
         # Dimensions:
         # predicted_quantiles: [num_samples x num_future_steps x num_quantiles]
 
-        return {
-            'predicted_quantiles': predicted_quantiles,
+        """could return 'predicted_quantiles': predicted_quantiles,
             'static_weights': static_weights.squeeze(-1),
             'historical_selection_weights': historical_selection_weights,
             'future_selection_weights': future_selection_weights,
-            'attention_scores': attention_scores
-        }
+            'attention_scores': attention_scores"""
+        return predicted_quantiles
