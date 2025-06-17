@@ -770,7 +770,14 @@ class TemporalFusionTransformer(nn.Module):
         Returns:
             torch.tensor: the time-wise replicated tensor
         """
-        time_distributed_signal = static_signal.unsqueeze(1).repeat(1, time_steps, 1)
+        # collapse any extra dims so shape == [batch, feat]
+        ss = static_signal
+        if ss.dim() > 2:
+            ss = ss.flatten(start_dim=1)                # now [batch, feat]
+
+        # unsqueeze into [batch, 1, feat] and repeat to [batch, time, feat]
+        time_distributed_signal = ss.unsqueeze(1) \
+                                   .repeat(1, time_steps, 1)
         return time_distributed_signal
 
     @staticmethod
@@ -848,10 +855,26 @@ class TemporalFusionTransformer(nn.Module):
         # the historical temporal signal is fed into the first recurrent module
         # using the static metadata as initial hidden and cell state
         # (initial cell and hidden states are replicated for feeding to each layer in the stack)
-        past_lstm_output, hidden = self.past_lstm(selected_historical,
-                                                  (c_seq_hidden.unsqueeze(0).repeat(self.lstm_layers, 1, 1),
-                                                   c_seq_cell.unsqueeze(0).repeat(self.lstm_layers, 1, 1)))
+        
+        print("c_seq_hidden.shape =", c_seq_hidden.shape)
+        print("c_seq_cell.shape   =", c_seq_cell.shape)
 
+        # Prepare initial LSTM states: collapse any extra dims so shape=[batch, feat]
+        h0 = c_seq_hidden
+        c0 = c_seq_cell
+        if h0.dim() > 2:
+            h0 = h0.flatten(start_dim=1)   # [batch, feat]
+        if c0.dim() > 2:
+            c0 = c0.flatten(start_dim=1)
+
+        # Unsqueeze to [1, batch, feat] and repeat across layers → [num_layers, batch, feat]
+        h0 = h0.unsqueeze(0).repeat(self.lstm_layers, 1, 1)
+        c0 = c0.unsqueeze(0).repeat(self.lstm_layers, 1, 1)
+
+        past_lstm_output, hidden = self.past_lstm(
+            selected_historical,
+            (h0, c0)
+        )
         # the future (known) temporal signal is fed into the second recurrent module
         # using the latest (hidden,cell) state of the first recurrent module
         # for setting the initial (hidden,cell) state.
@@ -986,8 +1009,18 @@ class TemporalFusionTransformer(nn.Module):
         hist_flat = historical_ts_rep.reshape(batch_size * hist_steps, -1)
         # repeat static selection for each time‐step
         # c_selection: (batch, state_size) → (batch, time, state_size) → (batch*time, state_size)
-        static_ctx = c_selection.unsqueeze(1).expand(batch_size, hist_steps, -1).reshape(batch_size * hist_steps, -1)
-        # call the GRN forward explicitly
+        # Ensure static selection is 2D: (batch, feat)
+        cs = c_selection
+        if cs.dim() > 2:
+            # collapse any extra singleton/time dims into the feature axis
+            cs = cs.flatten(start_dim=1)  # shape: [batch, feat]
+
+        # repeat for each time‐step:
+        #   (batch, feat) -> (batch, 1, feat) -> (batch, hist_steps, feat)
+        cs = cs.unsqueeze(1).expand(batch_size, hist_steps, cs.size(1))
+        # reshape to sequence of flattened samples: (batch*hist_steps, feat)
+        # Flatten (batch, time, feat) → (batch*time, feat)
+        static_ctx = cs.reshape(batch_size * hist_steps, cs.size(2))
         selected_historical, historical_selection_weights = self.historical_ts_selection.forward(
             hist_flat,
             static_ctx
@@ -1002,8 +1035,16 @@ class TemporalFusionTransformer(nn.Module):
         # flatten across time
         fut_flat = future_ts_rep.reshape(batch_size2 * fut_steps, -1)
         # same static context for future steps
-        static_ctx2 = c_selection.unsqueeze(1).expand(batch_size2, fut_steps, -1).reshape(batch_size2 * fut_steps, -1)
-        # call the future selector
+        # collapse any extra dims so c_selection is [batch, feat]
+        cs2 = c_selection
+        if cs2.dim() > 2:
+            cs2 = cs2.flatten(start_dim=1)   # now (batch, feat)
+
+        # unsqueeze & expand to (batch, fut_steps, feat)
+        cs2 = cs2.unsqueeze(1).expand(batch_size2, fut_steps, cs2.size(1))
+
+        # flatten to (batch*fut_steps, feat)
+        static_ctx2 = cs2.reshape(batch_size2 * fut_steps, cs2.size(2))        # call the future selector
         selected_future, future_selection_weights = self.future_ts_selection.forward(
             fut_flat,
             static_ctx2

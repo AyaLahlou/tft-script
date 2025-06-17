@@ -1,0 +1,792 @@
+RecursiveScriptModule(
+  original_name=TemporalFusionTransformer
+  (static_transform): RecursiveScriptModule(
+    original_name=InputChannelEmbedding
+    (numeric_transform): RecursiveScriptModule(
+      original_name=NumericInputTransformation
+      (numeric_projection_layers): RecursiveScriptModule(
+        original_name=ModuleList
+        (0): RecursiveScriptModule(original_name=Linear)
+        (1): RecursiveScriptModule(original_name=Linear)
+      )
+    )
+    (categorical_transform): RecursiveScriptModule(original_name=NullTransform)
+  )
+  (historical_ts_transform): RecursiveScriptModule(
+    original_name=InputChannelEmbedding
+    (numeric_transform): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(
+        original_name=NumericInputTransformation
+        (numeric_projection_layers): RecursiveScriptModule(
+          original_name=ModuleList
+          (0): RecursiveScriptModule(original_name=Linear)
+          (1): RecursiveScriptModule(original_name=Linear)
+          (2): RecursiveScriptModule(original_name=Linear)
+          (3): RecursiveScriptModule(original_name=Linear)
+          (4): RecursiveScriptModule(original_name=Linear)
+          (5): RecursiveScriptModule(original_name=Linear)
+          (6): RecursiveScriptModule(original_name=Linear)
+          (7): RecursiveScriptModule(original_name=Linear)
+        )
+      )
+    )
+    (categorical_transform): RecursiveScriptModule(original_name=NullTransform)
+  )
+  (future_ts_transform): RecursiveScriptModule(
+    original_name=InputChannelEmbedding
+    (numeric_transform): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(
+        original_name=NumericInputTransformation
+        (numeric_projection_layers): RecursiveScriptModule(
+          original_name=ModuleList
+          (0): RecursiveScriptModule(original_name=Linear)
+        )
+      )
+    )
+    (categorical_transform): RecursiveScriptModule(original_name=NullTransform)
+  )
+  (static_selection): RecursiveScriptModule(
+    original_name=VariableSelectionNetwork
+    (flattened_grn): RecursiveScriptModule(
+      original_name=GatedResidualNetwork
+      (fc1): RecursiveScriptModule(
+        original_name=TimeDistributed
+        (module): RecursiveScriptModule(original_name=Linear)
+      )
+      (skip_layer): RecursiveScriptModule(
+        original_name=TimeDistributed
+        (module): RecursiveScriptModule(original_name=Linear)
+      )
+      (elu1): RecursiveScriptModule(original_name=ELU)
+      (fc2): RecursiveScriptModule(
+        original_name=TimeDistributed
+        (module): RecursiveScriptModule(original_name=Linear)
+      )
+      (dropout): RecursiveScriptModule(original_name=Dropout)
+      (gate_layer): RecursiveScriptModule(
+        original_name=TimeDistributed
+        (module): RecursiveScriptModule(
+          original_name=Sequential
+          (0): RecursiveScriptModule(original_name=Linear)
+          (1): RecursiveScriptModule(original_name=Sigmoid)
+        )
+      )
+      (layer_norm): RecursiveScriptModule(
+        original_name=TimeDistributed
+        (module): RecursiveScriptModule(original_name=LayerNorm)
+      )
+      (context_projection): RecursiveScriptModule(
+        original_name=TimeDistributed
+        (module): RecursiveScriptModule(original_name=NullTransform)
+      )
+    )
+    (softmax): RecursiveScriptModule(original_name=Softmax)
+    (single_variable_grns): RecursiveScriptModule(
+      original_name=ModuleList
+      (0): RecursiveScriptModule(
+        original_name=GatedResidualNetwork
+        (fc1): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=Linear)
+        )
+        (skip_layer): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=NullTransform)
+        )
+        (elu1): RecursiveScriptModule(original_name=ELU)
+        (fc2): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=Linear)
+        )
+        (dropout): RecursiveScriptModule(original_name=Dropout)
+        (gate_layer): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(
+            original_name=Sequential
+            (0): RecursiveScriptModule(original_name=Linear)
+            (1): RecursiveScriptModule(original_name=Sigmoid)
+          )
+        )
+        (layer_norm): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=LayerNorm)
+        )
+        (context_projection): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=NullTransform)
+        )
+      )
+      (1): RecursiveScriptModule(
+        original_name=GatedResidualNetwork
+        (fc1): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=Linear)
+        )
+        (skip_layer): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=NullTransform)
+        )
+        (elu1): RecursiveScriptModule(original_name=ELU)
+        (fc2): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=Linear)
+        )
+        (dropout): RecursiveScriptModule(original_name=Dropout)
+        (gate_layer): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(
+            original_name=Sequential
+            (0): RecursiveScriptModule(original_name=Linear)
+            (1): RecursiveScriptModule(original_name=Sigmoid)
+          )
+        )
+        (layer_norm): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=LayerNorm)
+        )
+        (context_projection): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=NullTransform)
+        )
+      )
+    )
+  )
+  (historical_ts_selection): RecursiveScriptModule(
+    original_name=VariableSelectionNetwork
+    (flattened_grn): RecursiveScriptModule(
+      original_name=GatedResidualNetwork
+      (fc1): RecursiveScriptModule(
+        original_name=TimeDistributed
+        (module): RecursiveScriptModule(original_name=Linear)
+      )
+      (skip_layer): RecursiveScriptModule(
+        original_name=TimeDistributed
+        (module): RecursiveScriptModule(original_name=Linear)
+      )
+      (elu1): RecursiveScriptModule(original_name=ELU)
+      (fc2): RecursiveScriptModule(
+        original_name=TimeDistributed
+        (module): RecursiveScriptModule(original_name=Linear)
+      )
+      (dropout): RecursiveScriptModule(original_name=Dropout)
+      (gate_layer): RecursiveScriptModule(
+        original_name=TimeDistributed
+        (module): RecursiveScriptModule(
+          original_name=Sequential
+          (0): RecursiveScriptModule(original_name=Linear)
+          (1): RecursiveScriptModule(original_name=Sigmoid)
+        )
+      )
+      (layer_norm): RecursiveScriptModule(
+        original_name=TimeDistributed
+        (module): RecursiveScriptModule(original_name=LayerNorm)
+      )
+      (context_projection): RecursiveScriptModule(
+        original_name=TimeDistributed
+        (module): RecursiveScriptModule(original_name=Linear)
+      )
+    )
+    (softmax): RecursiveScriptModule(original_name=Softmax)
+    (single_variable_grns): RecursiveScriptModule(
+      original_name=ModuleList
+      (0): RecursiveScriptModule(
+        original_name=GatedResidualNetwork
+        (fc1): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=Linear)
+        )
+        (skip_layer): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=NullTransform)
+        )
+        (elu1): RecursiveScriptModule(original_name=ELU)
+        (fc2): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=Linear)
+        )
+        (dropout): RecursiveScriptModule(original_name=Dropout)
+        (gate_layer): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(
+            original_name=Sequential
+            (0): RecursiveScriptModule(original_name=Linear)
+            (1): RecursiveScriptModule(original_name=Sigmoid)
+          )
+        )
+        (layer_norm): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=LayerNorm)
+        )
+        (context_projection): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=NullTransform)
+        )
+      )
+      (1): RecursiveScriptModule(
+        original_name=GatedResidualNetwork
+        (fc1): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=Linear)
+        )
+        (skip_layer): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=NullTransform)
+        )
+        (elu1): RecursiveScriptModule(original_name=ELU)
+        (fc2): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=Linear)
+        )
+        (dropout): RecursiveScriptModule(original_name=Dropout)
+        (gate_layer): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(
+            original_name=Sequential
+            (0): RecursiveScriptModule(original_name=Linear)
+            (1): RecursiveScriptModule(original_name=Sigmoid)
+          )
+        )
+        (layer_norm): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=LayerNorm)
+        )
+        (context_projection): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=NullTransform)
+        )
+      )
+      (2): RecursiveScriptModule(
+        original_name=GatedResidualNetwork
+        (fc1): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=Linear)
+        )
+        (skip_layer): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=NullTransform)
+        )
+        (elu1): RecursiveScriptModule(original_name=ELU)
+        (fc2): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=Linear)
+        )
+        (dropout): RecursiveScriptModule(original_name=Dropout)
+        (gate_layer): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(
+            original_name=Sequential
+            (0): RecursiveScriptModule(original_name=Linear)
+            (1): RecursiveScriptModule(original_name=Sigmoid)
+          )
+        )
+        (layer_norm): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=LayerNorm)
+        )
+        (context_projection): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=NullTransform)
+        )
+      )
+      (3): RecursiveScriptModule(
+        original_name=GatedResidualNetwork
+        (fc1): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=Linear)
+        )
+        (skip_layer): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=NullTransform)
+        )
+        (elu1): RecursiveScriptModule(original_name=ELU)
+        (fc2): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=Linear)
+        )
+        (dropout): RecursiveScriptModule(original_name=Dropout)
+        (gate_layer): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(
+            original_name=Sequential
+            (0): RecursiveScriptModule(original_name=Linear)
+            (1): RecursiveScriptModule(original_name=Sigmoid)
+          )
+        )
+        (layer_norm): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=LayerNorm)
+        )
+        (context_projection): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=NullTransform)
+        )
+      )
+      (4): RecursiveScriptModule(
+        original_name=GatedResidualNetwork
+        (fc1): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=Linear)
+        )
+        (skip_layer): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=NullTransform)
+        )
+        (elu1): RecursiveScriptModule(original_name=ELU)
+        (fc2): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=Linear)
+        )
+        (dropout): RecursiveScriptModule(original_name=Dropout)
+        (gate_layer): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(
+            original_name=Sequential
+            (0): RecursiveScriptModule(original_name=Linear)
+            (1): RecursiveScriptModule(original_name=Sigmoid)
+          )
+        )
+        (layer_norm): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=LayerNorm)
+        )
+        (context_projection): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=NullTransform)
+        )
+      )
+      (5): RecursiveScriptModule(
+        original_name=GatedResidualNetwork
+        (fc1): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=Linear)
+        )
+        (skip_layer): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=NullTransform)
+        )
+        (elu1): RecursiveScriptModule(original_name=ELU)
+        (fc2): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=Linear)
+        )
+        (dropout): RecursiveScriptModule(original_name=Dropout)
+        (gate_layer): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(
+            original_name=Sequential
+            (0): RecursiveScriptModule(original_name=Linear)
+            (1): RecursiveScriptModule(original_name=Sigmoid)
+          )
+        )
+        (layer_norm): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=LayerNorm)
+        )
+        (context_projection): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=NullTransform)
+        )
+      )
+      (6): RecursiveScriptModule(
+        original_name=GatedResidualNetwork
+        (fc1): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=Linear)
+        )
+        (skip_layer): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=NullTransform)
+        )
+        (elu1): RecursiveScriptModule(original_name=ELU)
+        (fc2): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=Linear)
+        )
+        (dropout): RecursiveScriptModule(original_name=Dropout)
+        (gate_layer): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(
+            original_name=Sequential
+            (0): RecursiveScriptModule(original_name=Linear)
+            (1): RecursiveScriptModule(original_name=Sigmoid)
+          )
+        )
+        (layer_norm): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=LayerNorm)
+        )
+        (context_projection): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=NullTransform)
+        )
+      )
+      (7): RecursiveScriptModule(
+        original_name=GatedResidualNetwork
+        (fc1): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=Linear)
+        )
+        (skip_layer): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=NullTransform)
+        )
+        (elu1): RecursiveScriptModule(original_name=ELU)
+        (fc2): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=Linear)
+        )
+        (dropout): RecursiveScriptModule(original_name=Dropout)
+        (gate_layer): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(
+            original_name=Sequential
+            (0): RecursiveScriptModule(original_name=Linear)
+            (1): RecursiveScriptModule(original_name=Sigmoid)
+          )
+        )
+        (layer_norm): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=LayerNorm)
+        )
+        (context_projection): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=NullTransform)
+        )
+      )
+    )
+  )
+  (future_ts_selection): RecursiveScriptModule(
+    original_name=VariableSelectionNetwork
+    (flattened_grn): RecursiveScriptModule(
+      original_name=GatedResidualNetwork
+      (fc1): RecursiveScriptModule(
+        original_name=TimeDistributed
+        (module): RecursiveScriptModule(original_name=Linear)
+      )
+      (skip_layer): RecursiveScriptModule(
+        original_name=TimeDistributed
+        (module): RecursiveScriptModule(original_name=Linear)
+      )
+      (elu1): RecursiveScriptModule(original_name=ELU)
+      (fc2): RecursiveScriptModule(
+        original_name=TimeDistributed
+        (module): RecursiveScriptModule(original_name=Linear)
+      )
+      (dropout): RecursiveScriptModule(original_name=Dropout)
+      (gate_layer): RecursiveScriptModule(
+        original_name=TimeDistributed
+        (module): RecursiveScriptModule(
+          original_name=Sequential
+          (0): RecursiveScriptModule(original_name=Linear)
+          (1): RecursiveScriptModule(original_name=Sigmoid)
+        )
+      )
+      (layer_norm): RecursiveScriptModule(
+        original_name=TimeDistributed
+        (module): RecursiveScriptModule(original_name=LayerNorm)
+      )
+      (context_projection): RecursiveScriptModule(
+        original_name=TimeDistributed
+        (module): RecursiveScriptModule(original_name=Linear)
+      )
+    )
+    (softmax): RecursiveScriptModule(original_name=Softmax)
+    (single_variable_grns): RecursiveScriptModule(
+      original_name=ModuleList
+      (0): RecursiveScriptModule(
+        original_name=GatedResidualNetwork
+        (fc1): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=Linear)
+        )
+        (skip_layer): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=NullTransform)
+        )
+        (elu1): RecursiveScriptModule(original_name=ELU)
+        (fc2): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=Linear)
+        )
+        (dropout): RecursiveScriptModule(original_name=Dropout)
+        (gate_layer): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(
+            original_name=Sequential
+            (0): RecursiveScriptModule(original_name=Linear)
+            (1): RecursiveScriptModule(original_name=Sigmoid)
+          )
+        )
+        (layer_norm): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=LayerNorm)
+        )
+        (context_projection): RecursiveScriptModule(
+          original_name=TimeDistributed
+          (module): RecursiveScriptModule(original_name=NullTransform)
+        )
+      )
+    )
+  )
+  (static_encoder_selection): RecursiveScriptModule(
+    original_name=GatedResidualNetwork
+    (fc1): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=Linear)
+    )
+    (skip_layer): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=NullTransform)
+    )
+    (elu1): RecursiveScriptModule(original_name=ELU)
+    (fc2): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=Linear)
+    )
+    (dropout): RecursiveScriptModule(original_name=Dropout)
+    (gate_layer): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(
+        original_name=Sequential
+        (0): RecursiveScriptModule(original_name=Linear)
+        (1): RecursiveScriptModule(original_name=Sigmoid)
+      )
+    )
+    (layer_norm): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=LayerNorm)
+    )
+    (context_projection): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=NullTransform)
+    )
+  )
+  (static_encoder_enrichment): RecursiveScriptModule(
+    original_name=GatedResidualNetwork
+    (fc1): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=Linear)
+    )
+    (skip_layer): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=NullTransform)
+    )
+    (elu1): RecursiveScriptModule(original_name=ELU)
+    (fc2): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=Linear)
+    )
+    (dropout): RecursiveScriptModule(original_name=Dropout)
+    (gate_layer): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(
+        original_name=Sequential
+        (0): RecursiveScriptModule(original_name=Linear)
+        (1): RecursiveScriptModule(original_name=Sigmoid)
+      )
+    )
+    (layer_norm): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=LayerNorm)
+    )
+    (context_projection): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=NullTransform)
+    )
+  )
+  (static_encoder_sequential_cell_init): RecursiveScriptModule(
+    original_name=GatedResidualNetwork
+    (fc1): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=Linear)
+    )
+    (skip_layer): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=NullTransform)
+    )
+    (elu1): RecursiveScriptModule(original_name=ELU)
+    (fc2): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=Linear)
+    )
+    (dropout): RecursiveScriptModule(original_name=Dropout)
+    (gate_layer): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(
+        original_name=Sequential
+        (0): RecursiveScriptModule(original_name=Linear)
+        (1): RecursiveScriptModule(original_name=Sigmoid)
+      )
+    )
+    (layer_norm): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=LayerNorm)
+    )
+    (context_projection): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=NullTransform)
+    )
+  )
+  (static_encoder_sequential_state_init): RecursiveScriptModule(
+    original_name=GatedResidualNetwork
+    (fc1): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=Linear)
+    )
+    (skip_layer): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=NullTransform)
+    )
+    (elu1): RecursiveScriptModule(original_name=ELU)
+    (fc2): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=Linear)
+    )
+    (dropout): RecursiveScriptModule(original_name=Dropout)
+    (gate_layer): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(
+        original_name=Sequential
+        (0): RecursiveScriptModule(original_name=Linear)
+        (1): RecursiveScriptModule(original_name=Sigmoid)
+      )
+    )
+    (layer_norm): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=LayerNorm)
+    )
+    (context_projection): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=NullTransform)
+    )
+  )
+  (past_lstm): RecursiveScriptModule(original_name=LSTM)
+  (future_lstm): RecursiveScriptModule(original_name=LSTM)
+  (post_lstm_gating): RecursiveScriptModule(
+    original_name=GateAddNorm
+    (dropout_layer): RecursiveScriptModule(original_name=Dropout)
+    (gate): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(
+        original_name=GatedLinearUnit
+        (fc1): RecursiveScriptModule(original_name=Linear)
+        (fc2): RecursiveScriptModule(original_name=Linear)
+        (sigmoid): RecursiveScriptModule(original_name=Sigmoid)
+      )
+    )
+    (layernorm): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=LayerNorm)
+    )
+  )
+  (static_enrichment_grn): RecursiveScriptModule(
+    original_name=GatedResidualNetwork
+    (fc1): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=Linear)
+    )
+    (skip_layer): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=NullTransform)
+    )
+    (elu1): RecursiveScriptModule(original_name=ELU)
+    (fc2): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=Linear)
+    )
+    (dropout): RecursiveScriptModule(original_name=Dropout)
+    (gate_layer): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(
+        original_name=Sequential
+        (0): RecursiveScriptModule(original_name=Linear)
+        (1): RecursiveScriptModule(original_name=Sigmoid)
+      )
+    )
+    (layer_norm): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=LayerNorm)
+    )
+    (context_projection): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=Linear)
+    )
+  )
+  (multihead_attn): RecursiveScriptModule(
+    original_name=InterpretableMultiHeadAttention
+    (w_q): RecursiveScriptModule(original_name=Linear)
+    (w_k): RecursiveScriptModule(original_name=Linear)
+    (w_v): RecursiveScriptModule(original_name=Linear)
+    (out): RecursiveScriptModule(original_name=Linear)
+  )
+  (post_attention_gating): RecursiveScriptModule(
+    original_name=GateAddNorm
+    (dropout_layer): RecursiveScriptModule(original_name=Dropout)
+    (gate): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(
+        original_name=GatedLinearUnit
+        (fc1): RecursiveScriptModule(original_name=Linear)
+        (fc2): RecursiveScriptModule(original_name=Linear)
+        (sigmoid): RecursiveScriptModule(original_name=Sigmoid)
+      )
+    )
+    (layernorm): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=LayerNorm)
+    )
+  )
+  (pos_wise_ff_grn): RecursiveScriptModule(
+    original_name=GatedResidualNetwork
+    (fc1): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=Linear)
+    )
+    (skip_layer): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=NullTransform)
+    )
+    (elu1): RecursiveScriptModule(original_name=ELU)
+    (fc2): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=Linear)
+    )
+    (dropout): RecursiveScriptModule(original_name=Dropout)
+    (gate_layer): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(
+        original_name=Sequential
+        (0): RecursiveScriptModule(original_name=Linear)
+        (1): RecursiveScriptModule(original_name=Sigmoid)
+      )
+    )
+    (layer_norm): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=LayerNorm)
+    )
+    (context_projection): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=NullTransform)
+    )
+  )
+  (pos_wise_ff_gating): RecursiveScriptModule(
+    original_name=GateAddNorm
+    (dropout_layer): RecursiveScriptModule(original_name=Dropout)
+    (gate): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(
+        original_name=GatedLinearUnit
+        (fc1): RecursiveScriptModule(original_name=Linear)
+        (fc2): RecursiveScriptModule(original_name=Linear)
+        (sigmoid): RecursiveScriptModule(original_name=Sigmoid)
+      )
+    )
+    (layernorm): RecursiveScriptModule(
+      original_name=TimeDistributed
+      (module): RecursiveScriptModule(original_name=LayerNorm)
+    )
+  )
+  (output_layer): RecursiveScriptModule(original_name=Linear)
+)
