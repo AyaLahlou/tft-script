@@ -855,9 +855,6 @@ class TemporalFusionTransformer(nn.Module):
         # the historical temporal signal is fed into the first recurrent module
         # using the static metadata as initial hidden and cell state
         # (initial cell and hidden states are replicated for feeding to each layer in the stack)
-        
-        print("c_seq_hidden.shape =", c_seq_hidden.shape)
-        print("c_seq_cell.shape   =", c_seq_cell.shape)
 
         # Prepare initial LSTM states: collapse any extra dims so shape=[batch, feat]
         h0 = c_seq_hidden
